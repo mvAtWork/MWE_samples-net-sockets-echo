@@ -19,16 +19,99 @@
 
 #include <zephyr/net/socket.h>
 #include <zephyr/kernel.h>
+#include <zephyr/net/net_if.h>
+#include <zephyr/net/net_config.h>
 
 #endif
 
 #define BIND_PORT 4242
+
+void custom_net_if_init()
+{
+    int ret;
+
+    struct net_if *iface = net_if_get_default();
+    if (!iface)
+    {
+        printf("device lookup failed for network interface\n");
+        return;
+    }
+    printf("configuring network interface %s\n", iface->if_dev->dev->name);
+
+    /* remove IPv4 address set in kconfig */
+    if (sizeof(CONFIG_NET_CONFIG_MY_IPV4_ADDR) > 1)
+    {
+        struct in_addr defaultAddr;
+        net_addr_pton(AF_INET, CONFIG_NET_CONFIG_MY_IPV4_ADDR, &defaultAddr);
+        ret = net_if_ipv4_addr_rm(iface, &defaultAddr);
+        printf("removal of default ip returned %i\n", ret);
+    }
+
+    /* set IPv4 address */
+    const char* ipAddrStr = "192.0.77.77";
+    struct in_addr ipAddr;
+    ret = net_addr_pton(AF_INET, ipAddrStr, &ipAddr);
+    printf("ip address to be set '%s' (converted to %i.%i.%i.%i, ret %i)\n",
+            ipAddrStr,
+            ipAddr.s4_addr[0], ipAddr.s4_addr[1],
+            ipAddr.s4_addr[2], ipAddr.s4_addr[3],
+            ret);
+    struct net_if_addr *retAddr = net_if_ipv4_addr_add(iface, &ipAddr, NET_ADDR_MANUAL, 0);
+    if (!retAddr)
+    {
+        printf("error when adding IPv4 address %i.%i.%i.%i\n",
+               ipAddr.s4_addr[0], ipAddr.s4_addr[1],
+               ipAddr.s4_addr[2], ipAddr.s4_addr[3]);
+        return;
+    }
+
+    /* set IPv4 netmask */
+    const char* netmaskStr = "255.255.0.0";
+    struct in_addr netmask;
+    ret = net_addr_pton(AF_INET, netmaskStr, &netmask);
+    printf("netmask to be set '%s' (converted to %i.%i.%i.%i, ret %i)\n",
+            netmaskStr,
+            netmask.s4_addr[0], netmask.s4_addr[1],
+            netmask.s4_addr[2], netmask.s4_addr[3],
+            ret);
+    net_if_ipv4_set_netmask(iface, &netmask);
+
+    /* init network config */
+    ret = net_config_init_app(NULL, "Initializing network");
+    if (ret < 0)
+    {
+        printf("failed to initialize network settings for interface %s (err %i)\n",
+               iface->if_dev->dev->name, ret);
+    }
+    else
+    {
+        printf("successfully initialized network settings for interface %s\n",
+               iface->if_dev->dev->name);
+    }
+}
 
 int main(void)
 {
     int serv;
     struct sockaddr_in bind_addr;
     static int counter;
+
+    /* print network config */
+    struct net_if *iface = net_if_get_default();
+    char buf[NET_IPV4_ADDR_LEN];
+    printf("\nnetwork config before init:\n");
+    printf("address: %s\n", net_addr_ntop(AF_INET, &iface->config.ip.ipv4->unicast[0].address.in_addr, buf, sizeof(buf)));
+    printf("gateway: %s\n", net_addr_ntop(AF_INET, &iface->config.ip.ipv4->gw, buf, sizeof(buf)));
+    printf("netmask: %s\n\n", net_addr_ntop(AF_INET, &iface->config.ip.ipv4->netmask, buf, sizeof(buf)));
+
+    /* init network interface */
+    custom_net_if_init();
+
+    /* print network config */
+    printf("\nnetwork config after init:\n");
+    printf("address: %s\n", net_addr_ntop(AF_INET, &iface->config.ip.ipv4->unicast[0].address.in_addr, buf, sizeof(buf)));
+    printf("gateway: %s\n", net_addr_ntop(AF_INET, &iface->config.ip.ipv4->gw, buf, sizeof(buf)));
+    printf("netmask: %s\n\n", net_addr_ntop(AF_INET, &iface->config.ip.ipv4->netmask, buf, sizeof(buf)));
 
     serv = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
