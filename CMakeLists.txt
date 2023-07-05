@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(sockets_echo)
 
-FILE(GLOB app_sources src/*.c)
+FILE(GLOB app_sources src/*.cpp)
 target_sources(app PRIVATE ${app_sources})
 
 include(${ZEPHYR_BASE}/samples/net/common/common.cmake)
